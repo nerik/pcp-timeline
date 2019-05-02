@@ -1,33 +1,79 @@
-.App {
-  text-align: center;
+body {
+  --top-height: 60px;
+  --map-width: 300px;
+  scroll-snap-type: y mandatory;
+  scroll-padding: var(--top-height);
 }
 
-.App-logo {
-  animation: App-logo-spin infinite 20s linear;
-  height: 40vmin;
-  pointer-events: none;
+div {
+  /* border: 1px solid #ddd; */
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+.top {
+  position: fixed;
+  width: 100%;
+  height: var(--top-height);
+  background-color: #aaa;
+  z-index: 1;
 }
 
-.App-link {
-  color: #61dafb;
+.map {
+  position: fixed;
+  top: var(--top-height);
+  right: 0;
+  width: var(--map-width);
+  height: calc(100vh - var(--top-height));
+  background-color: #ddd;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.page {
+  position: absolute;
+  top: var(--top-height);
+  width: calc(100vw - var(--map-width));
+  display: grid;
+  grid-template-rows: [profile] auto [events] auto;
+  grid-template-columns: [timeline] 40px [detail] auto;
+  grid-template-areas: 
+    "profile profile"
+    "timeline detail"
+}
+
+.profile {
+  grid-area: profile;
+  scroll-snap-align: start;
+}
+
+.timeline {
+  grid-area: timeline;
+  position: sticky;
+  height: calc(100vh - var(--top-height));
+  top: var(--top-height);
+  background-color: #ccc;
+}
+
+.now {
+  position: absolute;
+  top: 50%;
+  width: 100%;
+  border-bottom: 3px solid red;
+}
+
+.detail {
+  grid-area: detail;
+}
+
+.event {
+  height: 80px;
+  border: 1px solid #ddd;
+  scroll-snap-align: center;
+}
+
+.event:first-child {
+  margin-top: 200px;
+}
+
+.selected {
+  font-weight: bold;
+  height: 140px;
+  background-color: aquamarine;
 }
