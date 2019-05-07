@@ -1,8 +1,13 @@
 body {
   --top-height: 60px;
   --map-width: 300px;
-  scroll-snap-type: y mandatory;
+  /* scroll-snap-type: y mandatory; */
   scroll-padding: var(--top-height);
+}
+
+.button {
+  position: absolute;
+  z-index: 2;
 }
 
 div {
@@ -40,7 +45,12 @@ div {
 
 .profile {
   grid-area: profile;
+  padding: 10px;
   scroll-snap-align: start;
+}
+
+.profile img {
+  height: 400px;
 }
 
 .timeline {
@@ -51,19 +61,51 @@ div {
   background-color: #ccc;
 }
 
-.now {
-  position: absolute;
-  top: 50%;
+.timeline svg {
   width: 100%;
-  border-bottom: 3px solid red;
+  height: 100%;
 }
+
+.timeline line {
+  stroke: black;
+  transition: .3s linear transform
+}
+
+.timeline .rfmosColumn {
+  transform: translateX(5px);
+}
+
+.timeline .eventsColumn {
+  transform: translateX(20px);
+}
+
+.timeline rect {
+  rx: 5;
+  ry: 5;
+  fill-opacity: .5;
+}
+
+.timeline .rfmosColumn rect {
+  fill: gray
+}
+
+.timeline .eventsColumn rect {
+  fill: red
+}
+
+.timeline rect.highlighted {
+  stroke: black;
+  fill: white;
+  fill-opacity: 1;
+}
+
 
 .detail {
   grid-area: detail;
 }
 
 .event {
-  height: 80px;
+  height: 90px;
   border: 1px solid #ddd;
   scroll-snap-align: center;
 }
@@ -72,8 +114,12 @@ div {
   margin-top: 200px;
 }
 
-.selected {
+.event:last-child {
+  margin-bottom: 100vh;
+}
+
+.event.highlighted {
   font-weight: bold;
-  height: 140px;
+  height: 160px;
   background-color: aquamarine;
 }
