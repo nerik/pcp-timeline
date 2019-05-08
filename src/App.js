@@ -1,6 +1,7 @@
 import React, { Component, Fragment, useState, useEffect, useRef, useMemo } from 'react';
 import dayjs from 'dayjs';
 import { scaleTime } from 'd3-scale'
+import { debounce } from 'lodash'
 import cx from 'classnames'
 import './App.css';
 
@@ -8,103 +9,11 @@ const START = dayjs(new Date(2017, 0, 1))
 const END = dayjs(new Date(2017, 11, 31))
 const COLUMN_WIDTH = 10
 
-// const eventsOberverConfig = {
-//   root: null, // avoiding 'root' or setting it to 'null' sets it to default value: viewport
-//   // rootMargin: '-40% 0px -40% 0px',
-//   // threshold: 0.5
-// };
-// const eventsObserver = new window.IntersectionObserver(entries => {
-//   console.log(entries.map(e => [entries[0].target.getAttribute('data-id'), entries[0].isIntersecting]))
-//   if (entries.length === 1 && entries[0].isIntersecting === true) {
-//     Object.keys(eventRefs).forEach(k => {
-//       const el = eventRefs[k]
-//       el.classList.toggle('selected', false)
-//     })
-//     const el = entries[0].target
-//     // const intersecting = entries[0].isIntersecting
-//     el.classList.toggle('selected', true)
-//     const index = parseInt(el.getAttribute('data-id'))
-//     const r = index / 50
-//     // console.log(r)
-//   }
-// }, eventsOberverConfig);
-
-
-// const detailsObserverConfig = {
-//   threshold: Array.from(Array(100).keys()).map(i => i/100)
-// }
-// console.log(detailsObserverConfig)
-// const detailsObserver = new window.IntersectionObserver(entries => {
-//   console.log(entries[0].intersectionRatio  )
-// }, detailsObserverConfig)
-// let detailsRef;
-
+let isRAFTicking = false 
 
 const Timeline = ({ events, rfmos }) => {
-  /*
-  componentDidMount() {
-    console.log('mount')
-    // console.log(eventRefs)
-    // Object.keys(eventRefs).forEach(k => {
-    //   const el = eventRefs[k]
-    //   eventsObserver.observe(el)
-    // })
-    // detailsObserver.observe(detailsRef)
-
-    const boundScroll = this.onScroll.bind(this)
-    this.boundUpdateScroll = this.updateScroll.bind(this)
-    window.addEventListener('scroll', boundScroll, true);
-  }
-
-  ticking = false
-
-  updateScroll() {
-    this.ticking = false;
-    const cH = document.documentElement.clientHeight;
-    const wH = window.innerHeight || 0;
-    const middle = 60 + Math.max(cH, wH) / 2;
-    
-    let selectedEl;
-    let minDelta = Number.POSITIVE_INFINITY
-    Object.keys(eventRefs).forEach(k => {
-      const el = eventRefs[k]
-      el.classList.toggle('selected', false)
-      const { top, bottom, height } = el.getBoundingClientRect()
-      // console.log(top, bottom, height)
-      const delta = Math.abs(middle - top)
-      if (delta < minDelta) {
-        selectedEl = el
-      }
-      minDelta = delta
-      // console.log(delta)
-    })
-
-    if (selectedEl) {
-      selectedEl.classList.toggle('selected', true)
-    }
-    // console.log
-    
-  }
-
-  onScroll() {
-    if (this.ticking === false) {
-      this.ticking = true;
-      window.requestAnimationFrame(this.boundUpdateScroll);
-    }
-  }
-
-  render() {
-// function App() {
-//   // const refContainer = useRef(null);
-*/
-  // const eventRefs = {}
-  // for (let i = 0; i < events.length; i++) {
-  //   eventRefs[i] = useRef(null)
-  // }
-  // events.forEach((event, i) => {
-  //   eventRefs[i] = useRef(null)
-  // })
-
+ 
+  // prepare coordinates (only be events prop changes, so that should mean only at mount)
   const computeCoordinates = (events, rfmos) => {
     const scale = scaleTime()
       .domain([START.toDate(), END.toDate()])
@@ -138,56 +47,94 @@ const Timeline = ({ events, rfmos }) => {
     }
   }
 
+  // Compute derived data when a new event is highlighted
   const computeScrollCoords = (timelineCoords, selected) => {
-    const event = timelineCoords.events.find(e => e.id === selected)
-    const y = (event) ? event.middleCoord : 0
-    const currentRfmo = (event === undefined) ? null : timelineCoords.rfmos.find(rfmo => {
-      if (event.middleNormalized > rfmo.startNormalized && event.middleNormalized < rfmo.endNormalized) {
+    const currentEvent = timelineCoords.events.find(e => e.id === selected)
+    const y = (currentEvent) ? currentEvent.middleCoord : 0
+    const currentRfmo = (currentEvent === undefined) ? null : timelineCoords.rfmos.find(rfmo => {
+      if (currentEvent.middleNormalized > rfmo.startNormalized && currentEvent.middleNormalized < rfmo.endNormalized) {
         return true
       }
+      return false
     })
     const currentRfmoId = (currentRfmo) ? currentRfmo.id : null
     return {
       y,
-      currentRfmoId
+      currentRfmoId,
+      currentEvent
     }
   }
 
-  let refs = useRef(new Map()).current;
+  // this stores DOM elements for events
+  let eventRefs = useRef(new Map()).current;
 
+  // store currently highlighted/selected event in state
   const [selected, setSelected] = useState(null)
 
-  const onScroll = () => {
+  // selects an event depending on scroll position
+  const checkScroll = () => {
+    isRAFTicking = false
     const cH = document.documentElement.clientHeight;
     const wH = window.innerHeight || 0;
     const middle = 60 + Math.max(cH, wH) / 2;
     let minDelta = Number.POSITIVE_INFINITY
     let selectedEvent;
-    refs.forEach((el, key) => {
+    eventRefs.forEach((el, key) => {
       el.classList.toggle('selected', false)
-      const { top, bottom, height } = el.getBoundingClientRect()
-      // console.log(top)
+      const { top } = el.getBoundingClientRect()
+
       const delta = Math.abs(middle - top)
       if (delta < minDelta) {
         selectedEvent = key
         minDelta = delta
       }
     })
-    // selectedEl.classList.toggle('selected', true)
     setSelected(selectedEvent)
   }
 
+  const onScroll = () => {
+    if (isRAFTicking === false) {
+      isRAFTicking = true
+      // avoid scroll jank by throttling to frame
+      window.requestAnimationFrame(checkScroll);
+    }
+  }
+
   useEffect(() => {
-    console.log('using effect')
+    console.log('useEffect:adding scroll listener on mount')
     window.addEventListener('scroll', onScroll, true);
     return () => {
       window.removeEventListener('scroll', onScroll, true);
     }
   }, [])
+  
+
 
   const timelineCoords = useMemo(() => computeCoordinates(events, rfmos), [events, rfmos])
   const scrollCoords = useMemo(() => computeScrollCoords(timelineCoords, selected), [timelineCoords, selected])
   
+
+  const [encounteredVessel, setEncounteredVessel] = useState(null)
+  const loadEncounteredVessel = (currentEvent) => {
+    console.log(currentEvent.encounteredVessel)
+    // simulate fetch - should also cancel pending, if it exists
+    setTimeout(() => setEncounteredVessel(currentEvent.encounteredVessel), 200)
+  }
+  const debouncedLoadEncounteredVessel = useRef(debounce(loadEncounteredVessel, 1000))
+  useEffect(() => {
+    console.log('useEffect:selected event changed - load encountered vessel on debounce')
+    setEncounteredVessel(null)
+    debouncedLoadEncounteredVessel.current.cancel()
+    console.log(scrollCoords.currentEvent)
+    if (selected !== null && scrollCoords.currentEvent.encounteredVessel !== null) {
+      debouncedLoadEncounteredVessel.current(scrollCoords.currentEvent)
+    }
+  }, [selected, scrollCoords])
+
+  console.log(encounteredVessel)
+
+
+
   return (
     <Fragment>
       <div className="top">
@@ -238,17 +185,21 @@ const Timeline = ({ events, rfmos }) => {
         </div>
         <div className="detail" /* ref={(ref) => { detailsRef = ref }} */>
           {timelineCoords.events.map(event => {
-            const c = cx('event', { highlighted: event.id === selected } )
             return (
             <div
               // ref={someRef}
-              ref={inst => inst === null ? refs.delete(event.id) : refs.set(event.id, inst)}
-              className={c} key={event.id}
+              ref={inst => inst === null ? eventRefs.delete(event.id) : eventRefs.set(event.id, inst)}
+              className={cx('event', { highlighted: event.id === selected } )} key={event.id}
             >
               Event {event.id}<br />
+              {event.encounteredVessel !== null && <div>I'm an encounter!</div>}
               {event.start.format('DD/MM/YYYY HH:mm')}<br />
               {event.end.format('DD/MM/YYYY HH:mm')}<br />
-              {(event.id === selected) && <b>selected</b>}
+              {event.id === selected && encounteredVessel !== null && (
+                <div className="encounteredVessel">
+                  {encounteredVessel}
+                </div>
+              )}
             </div>
           )})}
         </div>
@@ -299,6 +250,11 @@ const generateMock = () => {
     }
     allData[key] = data
   })
+
+  allData.event = allData.event.map(event => ({
+    ...event,
+    encounteredVessel: (Math.random() > .5) ? null : `other:${event.id}`
+  }))
 
   return allData
 }
